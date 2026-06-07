@@ -77,6 +77,19 @@ header{width:100%;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 60%,#0f34
 
 .btn-export{background:var(--blue);border:none;border-radius:10px;color:#fff;font-family:'Prompt',sans-serif;font-weight:700;font-size:0.9rem;padding:11px 22px;cursor:pointer;}
 .btn-export:hover{background:var(--blue-dark);}
+.btn-reset-all{background:transparent;border:1.5px solid #fca5a5;border-radius:10px;color:#dc2626;font-family:'Prompt',sans-serif;font-weight:700;font-size:0.9rem;padding:11px 22px;cursor:pointer;transition:all 0.2s;}
+.btn-reset-all:hover{background:#fef2f2;}
+.confirm-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:500;align-items:center;justify-content:center;}
+.confirm-overlay.open{display:flex;}
+.confirm-box{background:#fff;border-radius:16px;padding:36px 32px;width:380px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.2);}
+.confirm-box-title{font-family:'Prompt',sans-serif;font-weight:900;font-size:1.1rem;color:#dc2626;margin-bottom:8px;}
+.confirm-box-sub{font-size:0.85rem;color:#6b7280;margin-bottom:20px;line-height:1.6;}
+.confirm-input{width:100%;border:2px solid #fca5a5;border-radius:10px;padding:11px 14px;font-family:'Prompt',sans-serif;font-size:1rem;text-align:center;outline:none;margin-bottom:8px;transition:border-color 0.2s;}
+.confirm-input:focus{border-color:#dc2626;}
+.confirm-err{color:#dc2626;font-size:0.82rem;min-height:18px;margin-bottom:14px;}
+.btn-do-reset{width:100%;background:#dc2626;border:none;border-radius:10px;color:#fff;font-family:'Prompt',sans-serif;font-weight:900;font-size:1rem;padding:13px;cursor:pointer;margin-bottom:10px;}
+.btn-do-reset:hover{background:#b91c1c;}
+.btn-cancel-reset{width:100%;background:transparent;border:1.5px solid #e5e7eb;border-radius:10px;font-family:'Sarabun',sans-serif;font-size:0.9rem;padding:10px;cursor:pointer;color:#6b7280;}
 
 .no-data{text-align:center;padding:24px;color:var(--muted);}
 .toggle-btn{background:transparent;border:1.5px solid var(--border);border-radius:10px;padding:8px 18px;font-family:'Prompt',sans-serif;font-size:0.88rem;font-weight:700;cursor:pointer;color:var(--text);transition:all 0.2s;margin-bottom:16px;}
@@ -118,6 +131,7 @@ header{width:100%;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 60%,#0f34
       <span class="live-badge"><span class="live-dot"></span>LIVE</span>
     </div>
     <button class="btn-export" onclick="exportCSV()">📥 Export CSV</button>
+    <button class="btn-reset-all" onclick="openResetConfirm()">🗑️ Reset ข้อมูลทั้งหมด</button>
   </div>
 
   <!-- Stats สะสม -->
@@ -192,7 +206,7 @@ const firebaseConfig = {
 const SUPER_PASS = "super5678"; // ← เปลี่ยน
 window.CANDIDATES = [
   { id:1, number:1, name:"มาริตา คล่องวิจักษณ์",        class:"พรรคชมสิ่งสวยงามสักครู่", color:"#0a3d91" },
-  { id:2, number:2, name:"ซันดร้า แวน เอเพ็น", class:"พรรค2",  color:"#c0182a" },
+  { id:2, number:2, name:"ซันดร้า แวน เอเพ็น", class:"พรรค2", color:"#c0182a" },
   { id:3, number:3, name:"กัญญาณัฐ ศรีกัลยา",     class:"พรรคธีร์", color:"#0891b2" },
   { id:4, number:4, name:"ธัญชนก สันรัมย์",        class:"พรรคใจจากเค้ามาเลือกเรานะ", color:"#7c3aed" },
   { id:5, number:5, name:"ชญาณิศา อ่อนนวล",       class:"พรรค แอส-แตร์-เวอ-นีร์", color:"#059669" },
@@ -202,6 +216,7 @@ window.CANDIDATES = [
 
 const app = initializeApp(firebaseConfig);
 const db  = getFirestore(app);
+window._db = db;
 let currentRound   = 1;
 let approvedData   = {};
 
@@ -352,6 +367,58 @@ window.selectGrade = function(grade, label) {
   }).join('');
 };
 
+window.openResetConfirm = function() {
+  document.getElementById('reset-confirm-input').value = '';
+  document.getElementById('reset-err').textContent = '';
+  document.getElementById('btn-do-reset').disabled = true;
+  document.getElementById('reset-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('reset-confirm-input').focus(), 100);
+};
+
+window.closeResetConfirm = function() {
+  document.getElementById('reset-overlay').classList.remove('open');
+};
+
+window.checkResetInput = function() {
+  const val = document.getElementById('reset-confirm-input').value;
+  document.getElementById('btn-do-reset').disabled = (val !== 'ยืนยันการลบข้อมูล');
+};
+
+window.doReset = async function() {
+  const val = document.getElementById('reset-confirm-input').value;
+  if (val !== 'ยืนยันการลบข้อมูล') {
+    document.getElementById('reset-err').textContent = '❌ ข้อความไม่ถูกต้อง';
+    return;
+  }
+  const btn = document.getElementById('btn-do-reset');
+  btn.disabled = true;
+  btn.textContent = 'กำลังลบข้อมูล...';
+  try {
+    const db = window._db;
+    // ลบ results/approved
+    await setDoc(doc(db, "results", "approved"), {
+      total:0, abstain:0,
+      c1:0,c2:0,c3:0,c4:0,c5:0,c6:0
+    });
+    // ลบ settings/election
+    await setDoc(doc(db, "settings", "election"), { currentRound:1 });
+    // ลบ rounds/round_1
+    await setDoc(doc(db, "rounds", "round_1"), { status:'idle', total:0, abstain:0 });
+    // ลบ booths ทั้งหมด
+    for (let i = 1; i <= 8; i++) {
+      await setDoc(doc(db, "booths", `booth_${i}`), {
+        unlocked: false, boothStatus: 'locked'
+      });
+    }
+    closeResetConfirm();
+    alert('✅ Reset เรียบร้อยแล้ว ข้อมูลทั้งหมดถูกลบแล้ว');
+  } catch(e) {
+    document.getElementById('reset-err').textContent = '❌ เกิดข้อผิดพลาด: ' + e.message;
+    btn.disabled = false;
+    btn.textContent = 'ยืนยัน ลบข้อมูลทั้งหมด';
+  }
+};
+
 window.exportCSV = function() {
   const data = approvedData;
   const GRADES = [
@@ -419,5 +486,22 @@ window.exportCSV = function() {
   a.click();
 };
 </script>
+<!-- Reset Confirm Overlay -->
+<div class="confirm-overlay" id="reset-overlay">
+  <div class="confirm-box">
+    <div class="confirm-box-title">⚠️ Reset ข้อมูลการเลือกตั้ง</div>
+    <div class="confirm-box-sub">
+      การ reset จะลบข้อมูลทั้งหมดออกจาก Firebase<br>
+      ได้แก่ คะแนนทุกรอบ สถานะคูหา และผลสะสม<br><br>
+      พิมพ์ <strong style="color:#dc2626">ยืนยันการลบข้อมูล</strong> เพื่อดำเนินการ
+    </div>
+    <input type="text" id="reset-confirm-input" class="confirm-input"
+      placeholder="พิมพ์ที่นี่" oninput="checkResetInput()"
+      onkeypress="if(event.key==='Enter')doReset()">
+    <div class="confirm-err" id="reset-err"></div>
+    <button class="btn-do-reset" id="btn-do-reset" onclick="doReset()" disabled>ยืนยัน ลบข้อมูลทั้งหมด</button>
+    <button class="btn-cancel-reset" onclick="closeResetConfirm()">ยกเลิก</button>
+  </div>
+</div>
 </body>
 </html>
