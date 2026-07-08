@@ -534,9 +534,9 @@ function attachVotesListener(idx){
 
 // Locks in the team's answer as soon as one option has a strict majority of the
 // team's current member count. If every member has voted and nobody has a
-// majority (e.g. a 2-2-1 split):
-//  - if the captain's own vote is one of the tied leading options, that settles it
-//  - otherwise the captain gets asked to explicitly choose between the tied options
+// majority, and there's a clear single leader (no tie), that's the answer.
+// If two or more options are tied for the lead, the captain always gets asked
+// to explicitly choose between just those tied options.
 function maybeLockDecision(idx, votes, existingTiebreak){
   if (!memberCount) return;
   const counts = {};
@@ -556,14 +556,12 @@ function maybeLockDecision(idx, votes, existingTiebreak){
   if (totalVotes >= memberCount && !existingTiebreak){
     const maxCount = Math.max(...Object.values(counts));
     const contenders = Object.keys(counts).filter(k => counts[k] === maxCount).map(Number);
-    const captainVote = votes[captainMemberId];
     if (contenders.length === 1){
+      // Clear (if not majority-sized) leader, no tie — no need to bother the captain.
       lockDecision(idx, contenders[0]);
-    } else if (captainVote && contenders.includes(captainVote.optionIndex)){
-      lockDecision(idx, captainVote.optionIndex);
     } else {
-      // Captain's vote isn't one of the tied leaders — ask the captain to explicitly
-      // choose between just those options.
+      // Two or more options tied for the lead — the captain always explicitly
+      // chooses between just those tied options, regardless of what they voted for.
       db.ref('/session/answers/' + idx + '/' + teamId + '/tiebreak').transaction(current => {
         if (current !== null && current !== undefined) return;
         return { candidates: contenders };
